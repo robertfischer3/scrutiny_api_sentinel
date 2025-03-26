@@ -14,7 +14,7 @@ dependencies = [
 packages = [{include = "scrutiny_api_sentinel", from = "src"}]
 
 [tool.poetry.dependencies]
-python = "^3.9"
+python = "^3.12"
 fastapi = "^0.95.0"
 uvicorn = "^0.21.1"
 httpx = "^0.24.0"
