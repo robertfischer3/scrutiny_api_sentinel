@@ -7,12 +7,19 @@ It provides the core functionality for monitoring and analyzing API traffic.
 
 import logging
 import os
+from pathlib import Path
 from typing import Dict, List, Optional
+import json
+from datetime import datetime
+
+# Temporary in-memory storage for scan results
+scan_results = {}
 
 import uvicorn
 from fastapi import FastAPI, Depends, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from fastapi import BackgroundTasks, File, UploadFile, Form
 
 # Import local modules
 # from scrutiny_api_sentinel.interceptor import APIInterceptor
@@ -48,6 +55,96 @@ class HealthResponse(BaseModel):
     status: str
     version: str
 
+# Background task function
+async def run_scanner_task(scan_id: str, source_type: str, config: Dict[str, Any], 
+                          file_path: Optional[Path] = None, data: Optional[Dict[str, Any]] = None):
+    """Background task to run a scanner and store results."""
+    try:
+        scanner = get_scanner(source_type, config)
+        
+        if source_type == "log" and file_path:
+            result = await scanner.scan_file(file_path)
+        elif source_type == "traffic" and file_path:
+            result = await scanner.scan_capture(file_path)
+        elif source_type == "webhook" and data:
+            result = await scanner.process_webhook(data)
+        else:
+            logger.error(f"Invalid scan configuration: {source_type}")
+            scan_results[scan_id] = {"status": "error", "message": "Invalid scan configuration"}
+            return
+            
+        # Store results
+        scan_results[scan_id] = {
+            "status": "completed",
+            "timestamp": datetime.now().isoformat(),
+            "result": result.dict()
+        }
+        logger.info(f"Scan {scan_id} completed with {result.entries_processed} entries processed")
+        
+    except Exception as e:
+        logger.exception(f"Error in scan {scan_id}: {str(e)}")
+        scan_results[scan_id] = {
+            "status": "error", 
+            "message": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
+
+# New endpoint for log file scanning
+@app.post("/api/scan/logs", status_code=status.HTTP_202_ACCEPTED)
+async def scan_log_file(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    config: Optional[str] = Form(None)
+):
+    """Upload and scan an API log file for analysis."""
+    scan_id = f"scan_{datetime.now().strftime('%Y%m%d%H%M%S')}_{os.urandom(4).hex()}"
+    
+    # Save uploaded file to a temporary location
+    temp_dir = Path(os.getenv("TEMP_DIR", "/tmp/api-sentinel"))
+    temp_dir.mkdir(exist_ok=True)
+    
+    file_path = temp_dir / f"{scan_id}_{file.filename}"
+    
+    try:
+        # Save the uploaded file
+        with open(file_path, "wb") as f:
+            content = await file.read()
+            f.write(content)
+            
+        # Parse scanner configuration
+        scanner_config = json.loads(config) if config else {}
+        
+        # Start background scan
+        scan_results[scan_id] = {"status": "pending", "timestamp": datetime.now().isoformat()}
+        background_tasks.add_task(
+            run_scanner_task,
+            scan_id=scan_id,
+            source_type="log",
+            config=scanner_config,
+            file_path=file_path
+        )
+        
+        return {"scan_id": scan_id, "status": "pending"}
+        
+    except Exception as e:
+        logger.exception(f"Error setting up log scan: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error setting up scan: {str(e)}"
+        )
+
+
+# Endpoint to check scan status
+@app.get("/api/scan/{scan_id}")
+async def get_scan_status(scan_id: str):
+    """Get the status or results of a previously initiated scan."""
+    if scan_id not in scan_results:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Scan with ID {scan_id} not found"
+        )
+        
+    return scan_results[scan_id]
 
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
@@ -68,6 +165,7 @@ async def intercept_middleware(request: Request, call_next):
     logger.info(f"Response status code: {response.status_code}")
     
     return response
+
 
 
 @app.post("/api/intercept", status_code=status.HTTP_200_OK)
