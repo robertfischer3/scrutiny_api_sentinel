@@ -16,10 +16,15 @@ from datetime import datetime
 scan_results = {}
 
 import uvicorn
-from fastapi import FastAPI, Depends, HTTPException, Request, Response, status
-from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from fastapi import BackgroundTasks, File, UploadFile, Form
+
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks, Request, Response, status
+from fastapi.middleware.cors import CORSMiddleware
+from typing import List, Dict, Any, Optional
+import json
+
+from scrutiny_api_sentinel.scanner import get_scanner, APILogEntry
+from scrutiny_api_sentinel.ml.data_utils import generate_synthetic_anomalies, generate_security_threats
 
 # Import local modules
 # from scrutiny_api_sentinel.interceptor import APIInterceptor
