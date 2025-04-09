@@ -15,20 +15,19 @@ packages = [{include = "scrutiny_api_sentinel", from = "src"}]
 
 [tool.poetry.dependencies]
 python = "^3.12"
-fastapi = "^0.95.0"
-uvicorn = "^0.21.1"
-httpx = "^0.24.0"
+fastapi = "^0.115.12"
+uvicorn = "^0.34.0"
+httpx = "^0.28.1"
 scikit-learn = "^1.2.2"
 pandas = "^2.0.0"
-numpy = "^1.24.2"
-python-multipart = "^0.0.6"
-pydantic = "^1.10.7"
+numpy = "^2.2.4"
+python-multipart = "^0.0.20"
+pydantic = "^2.10.6"
 joblib = "^1.2.0"
-aiofiles = "^23.1.0"
+aiofiles = "^24.1.0"
 motor = "^3.1.1"
 influxdb-client = "^1.36.1"
-websockets = "^11.0.2"
-
+websockets = "^15.0.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.3.1"
